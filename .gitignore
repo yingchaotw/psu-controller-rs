@@ -1,0 +1,24 @@
+# .gitignore file
+
+# --- Core Rust ---
+/target/
+**/*.rs.bk
+
+# --- Slint UI & Build artifacts ---
+# 如果 Slint 編譯產生了額外的暫存檔，通常也在 target 裡，
+# 但如果你有手動生成代碼到 src，要小心不要 ignore 到。
+
+# --- IDE & Editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- OS Generated ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# --- Security ---
+.env
+.env.local

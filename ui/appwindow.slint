@@ -1,0 +1,191 @@
+import { Button, VerticalBox, LineEdit, HorizontalBox, ComboBox } from "std-widgets.slint";
+
+// 自訂元件 Card
+component Card inherits Rectangle {
+    in property <string> title: "";
+    background: #2c2c2c; border-radius: 8px; border-width: 1px; border-color: #444444;
+    VerticalBox {
+        padding: 10px; spacing: 10px;
+        Text { text: root.title; font-size: 14px; font-weight: 700; color: #ffffff; }
+        @children
+    }
+}
+
+// 微調按鈕
+component StepButton inherits Button { width: 30px; height: 30px; }
+
+export component AppWindow inherits Window {
+    title: "Rust PSU Controller";
+    width: 750px; height: 430px;
+    background: #1c1c1c;
+
+    // --- 屬性 ---
+    in-out property <[string]> available-ports: []; 
+    in-out property <string> selected-port;
+    in-out property <string> status-text: "Disconnected";
+    in-out property <brush> status-color: #ff5555;
+    
+    // [新增] 兩個獨立的讀取數值變數
+    in-out property <string> voltage-reading: "---";
+    in-out property <string> current-reading: "---";
+
+    in-out property <string> target-voltage: "12.00";
+    in-out property <string> target-current: "2.00";
+    in-out property <bool> show-reset-confirm: false;
+
+    // [新增] 機器資訊的變數
+    in-out property <string> device-info: "Device Info: ---";
+
+    // --- Callbacks ---
+    callback send_command(string);     // ON, OFF, UNLOCK
+    callback toggle_connection();
+    callback adjust_voltage(float); 
+    callback adjust_current(float);
+    callback apply_voltage(string);    
+    callback apply_current(string);    
+    callback confirm_reset();          
+    
+    // [新增] 讀取的 Callbacks
+    callback read_voltage();
+    callback read_current();
+
+    Rectangle {
+        // === Layer 1: 主介面 ===
+        VerticalBox {
+            padding: 20px; spacing: 20px;
+
+            // 1. 頂部連線列
+            HorizontalBox {
+                spacing: 10px; alignment: start; 
+                Text { text: "Port:"; vertical-alignment: center; color: white; }
+                ComboBox { model: root.available-ports; current-value <=> root.selected-port; width: 160px; }
+                Button {
+                    text: root.status-text == "Connected" ? "Disconnect" : "Connect";
+                    primary: root.status-text != "Connected";
+                    clicked => { root.toggle_connection(); }
+                }
+                VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
+                Text { text: root.status-text; vertical-alignment: center; color: #cccccc; }
+            }
+
+            // 2. 中間雙欄控制區
+            HorizontalBox {
+                spacing: 20px;
+
+                // --- 左邊：電壓卡片 ---
+                Card {
+                    title: "VOLTAGE CONTROL";
+                    // 設定區
+                    HorizontalBox {
+                        spacing: 5px;
+                        Text { text: "Set V:"; vertical-alignment: center; color: white; }
+                        StepButton { text: "-"; clicked => { root.adjust_voltage(-0.1); } }
+                        in-volt := LineEdit { text <=> root.target-voltage; horizontal-alignment: center; }
+                        StepButton { text: "+"; clicked => { root.adjust_voltage(0.1); } }
+                    }
+                    Button {
+                        text: "APPLY Voltage";
+                        enabled: root.status-text == "Connected";
+                        clicked => { root.apply_voltage(root.target-voltage); }
+                    }
+                    
+                    Rectangle { height: 1px; background: #444; } // 分隔線
+
+                    // [新增] 電壓讀取區
+                    HorizontalBox {
+                        Button {
+                            text: "READ V"; width: 80px; enabled: root.status-text == "Connected";
+                            clicked => { root.read_voltage(); }
+                        }
+                        Text { 
+                            text: root.voltage-reading + " V"; // 加上單位
+                            color: #00ff00; // 綠色字
+                            font-size: 24px; font-weight: 700; 
+                            horizontal-alignment: center; vertical-alignment: center; 
+                        }
+                    }
+                }
+
+                // --- 右邊：電流卡片 ---
+                Card {
+                    title: "CURRENT LIMIT";
+                    // 設定區
+                    HorizontalBox {
+                        spacing: 5px;
+                        Text { text: "Set A:"; vertical-alignment: center; color: white; }
+                        StepButton { text: "-"; clicked => { root.adjust_current(-0.01); } }
+                        in-curr := LineEdit { text <=> root.target-current; horizontal-alignment: center; }
+                        StepButton { text: "+"; clicked => { root.adjust_current(0.01); } }
+                    }
+                    Button {
+                        text: "APPLY OCP";
+                        enabled: root.status-text == "Connected";
+                        clicked => { root.apply_current(root.target-current); }
+                    }
+
+                    Rectangle { height: 1px; background: #444; } 
+
+                    // 電流讀取區
+                    HorizontalBox {
+                        Button {
+                            text: "READ I"; width: 80px; enabled: root.status-text == "Connected";
+                            clicked => { root.read_current(); }
+                        }
+                        Text { 
+                            text: root.current-reading + " A"; 
+                            color: #00ffff; // 青色字
+                            font-size: 24px; font-weight: 700; 
+                            horizontal-alignment: center; vertical-alignment: center; 
+                        }
+                    }
+                }
+            }
+
+            // 3. 底部功能區
+            HorizontalBox {
+                height: 50px; spacing: 20px;
+                Button { text: "OUTPUT ON"; primary: true; enabled: root.status-text == "Connected"; clicked => { root.send_command("ON"); } }
+                Button { text: "OUTPUT OFF"; enabled: root.status-text == "Connected"; clicked => { root.send_command("OFF"); } }
+                Rectangle { width: 20px; }
+                Button { text: "Unlock Panel"; enabled: root.status-text == "Connected"; clicked => { root.send_command("UNLOCK"); } }
+                Button { text: "Factory Reset"; enabled: root.status-text == "Connected"; clicked => { root.show-reset-confirm = true; } }
+            }
+
+            // 4. 最底部的機器資訊顯示區
+            // 使用 VerticalLayout + alignment 來置中，並加上一點邊距
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.device-info;
+                    color: #666666; // 深灰色，低調一點
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        // === Layer 2: 確認視窗 (Overlay) ===
+        if root.show-reset-confirm : Rectangle {
+            background: #000000aa;
+            TouchArea { clicked => { root.show-reset-confirm = false; } }
+            Rectangle {
+                width: 320px; height: 180px; background: #2c2c2c; border-radius: 12px; border-width: 1px; border-color: #555;
+                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
+                VerticalBox {
+                    padding: 20px; spacing: 20px; alignment: center;
+                    Text { text: "⚠️ Confirm Reset?"; color: white; font-size: 20px; font-weight: 700; horizontal-alignment: center; }
+                    Text { text: "Restore factory settings?"; color: #ccc; horizontal-alignment: center; }
+                    HorizontalBox {
+                        spacing: 20px; alignment: center;
+                        Button { text: "Cancel"; width: 100px; clicked => { root.show-reset-confirm = false; } }
+                        Rectangle {
+                            width: 100px; height: 32px; background: #ff5555; border-radius: 4px;
+                            Text { text: "RESET"; color: white; font-weight: 700; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
+                            TouchArea { clicked => { root.show-reset-confirm = false; root.confirm_reset(); } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
