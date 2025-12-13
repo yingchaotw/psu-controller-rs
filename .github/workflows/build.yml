@@ -1,0 +1,53 @@
+name: Rust Build Pipeline
+
+# 觸發條件：當推送到 main 分支，或是發起 Pull Request 時
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    # 這裡很關鍵！我們讓它同時在 Windows, Ubuntu, macOS 三種環境跑
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    # 1. 下載您的程式碼
+    - uses: actions/checkout@v4
+
+    # 2. 安裝 Rust 環境 (GitHub 內建就有，但這個 action 可以確保版本最新)
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+
+    # 3. 安裝 Linux 需要的 Slint 相依套件 (Windows/Mac 通常不需要這步)
+    - name: Install Linux Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libfontconfig1-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+    # 4. 執行編譯 (Release 模式)
+    - name: Build
+      run: cargo build --release --verbose
+
+    # 5. 執行測試 (如果有寫 test 的話)
+    - name: Run tests
+      run: cargo test --release --verbose
+
+    # 6. 上傳編譯好的檔案 (讓您可以下載)
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: psu-controller-${{ matrix.os }}
+        path: |
+          target/release/psu_controller
+          target/release/psu_controller.exe
+        if-no-files-found: ignore

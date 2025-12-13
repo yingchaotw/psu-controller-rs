@@ -14,9 +14,41 @@ component Card inherits Rectangle {
 // 微調按鈕
 component StepButton inherits Button { width: 30px; height: 30px; }
 
+// [修正] 自訂頁籤按鈕 (Tab Button)
+component TabButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> active: false;
+    callback clicked;
+
+    width: 50%; 
+    height: 40px;
+    
+    // 背景色
+    background: root.active ? #3c3c3c : #1c1c1c;
+
+    // 文字
+    Text { 
+        text: root.text; 
+        color: root.active ? #ffffff : #888888; 
+        font-weight: root.active ? 700 : 400;
+        vertical-alignment: center; horizontal-alignment: center;
+    }
+    
+    // [修正點] 用一個獨立的 Rectangle 來模擬底部邊框
+    Rectangle {
+        width: 100%;
+        height: 2px;
+        y: parent.height - self.height; // 貼在最底部
+        background: root.active ? #00aaff : #333333; // 選中變藍，未選中變灰
+    }
+
+    TouchArea { clicked => { root.clicked(); } }
+}
+
 export component AppWindow inherits Window {
     title: "Rust PSU Controller";
-    width: 750px; height: 430px;
+    width: 750px; 
+    height: 600px;
     background: #1c1c1c;
 
     // --- 屬性 ---
@@ -25,7 +57,6 @@ export component AppWindow inherits Window {
     in-out property <string> status-text: "Disconnected";
     in-out property <brush> status-color: #ff5555;
     
-    // [新增] 兩個獨立的讀取數值變數
     in-out property <string> voltage-reading: "---";
     in-out property <string> current-reading: "---";
 
@@ -33,28 +64,30 @@ export component AppWindow inherits Window {
     in-out property <string> target-current: "2.00";
     in-out property <bool> show-reset-confirm: false;
 
-    // [新增] 機器資訊的變數
     in-out property <string> device-info: "Device Info: ---";
+    in-out property <bool> is-looping: false;
+
+    // 目前的頁籤索引 (0: Manual, 1: Auto)
+    in-out property <int> active-tab: 0;
 
     // --- Callbacks ---
-    callback send_command(string);     // ON, OFF, UNLOCK
+    callback send_command(string);
     callback toggle_connection();
     callback adjust_voltage(float); 
     callback adjust_current(float);
-    callback apply_voltage(string);    
-    callback apply_current(string);    
-    callback confirm_reset();          
-    
-    // [新增] 讀取的 Callbacks
+    callback apply_voltage(string);     
+    callback apply_current(string);     
+    callback confirm_reset();           
     callback read_voltage();
     callback read_current();
+    callback toggle_loop(string, string, int); 
 
     Rectangle {
         // === Layer 1: 主介面 ===
         VerticalBox {
             padding: 20px; spacing: 20px;
 
-            // 1. 頂部連線列
+            // 1. [共用區] 頂部連線列
             HorizontalBox {
                 spacing: 10px; alignment: start; 
                 Text { text: "Port:"; vertical-alignment: center; color: white; }
@@ -64,84 +97,151 @@ export component AppWindow inherits Window {
                     primary: root.status-text != "Connected";
                     clicked => { root.toggle_connection(); }
                 }
+                // 使用內建 VerticalLayout 置中
                 VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
                 Text { text: root.status-text; vertical-alignment: center; color: #cccccc; }
             }
 
-            // 2. 中間雙欄控制區
+            // 2. 頁籤切換列
             HorizontalBox {
-                spacing: 20px;
+                spacing: 0px; 
+                TabButton { 
+                    text: "Manual Control"; 
+                    active: root.active-tab == 0; 
+                    clicked => { root.active-tab = 0; }
+                }
+                TabButton { 
+                    text: "Waveform Gen (Auto)"; 
+                    active: root.active-tab == 1; 
+                    clicked => { root.active-tab = 1; }
+                }
+            }
 
-                // --- 左邊：電壓卡片 ---
-                Card {
-                    title: "VOLTAGE CONTROL";
-                    // 設定區
-                    HorizontalBox {
-                        spacing: 5px;
-                        Text { text: "Set V:"; vertical-alignment: center; color: white; }
-                        StepButton { text: "-"; clicked => { root.adjust_voltage(-0.1); } }
-                        in-volt := LineEdit { text <=> root.target-voltage; horizontal-alignment: center; }
-                        StepButton { text: "+"; clicked => { root.adjust_voltage(0.1); } }
-                    }
-                    Button {
-                        text: "APPLY Voltage";
-                        enabled: root.status-text == "Connected";
-                        clicked => { root.apply_voltage(root.target-voltage); }
-                    }
-                    
-                    Rectangle { height: 1px; background: #444; } // 分隔線
+            // 3. [切換區] 內容顯示
+            Rectangle {
+                // --- Tab 0: 手動控制 ---
+                if root.active-tab == 0 : HorizontalBox {
+                    spacing: 20px;
 
-                    // [新增] 電壓讀取區
-                    HorizontalBox {
-                        Button {
-                            text: "READ V"; width: 80px; enabled: root.status-text == "Connected";
-                            clicked => { root.read_voltage(); }
+                    // 左邊：電壓卡片
+                    Card {
+                        title: "VOLTAGE CONTROL";
+                        HorizontalBox {
+                            spacing: 5px;
+                            Text { text: "Set V:"; vertical-alignment: center; color: white; }
+                            StepButton { text: "-"; clicked => { root.adjust_voltage(-0.1); } }
+                            in-volt := LineEdit { text <=> root.target-voltage; horizontal-alignment: center; }
+                            StepButton { text: "+"; clicked => { root.adjust_voltage(0.1); } }
                         }
-                        Text { 
-                            text: root.voltage-reading + " V"; // 加上單位
-                            color: #00ff00; // 綠色字
-                            font-size: 24px; font-weight: 700; 
-                            horizontal-alignment: center; vertical-alignment: center; 
+                        Button {
+                            text: "APPLY Voltage";
+                            enabled: root.status-text == "Connected";
+                            clicked => { root.apply_voltage(root.target-voltage); }
+                        }
+                        Rectangle { height: 1px; background: #444; }
+                        HorizontalBox {
+                            Button {
+                                text: "READ V"; width: 80px; enabled: root.status-text == "Connected";
+                                clicked => { root.read_voltage(); }
+                            }
+                            Text { 
+                                text: root.voltage-reading + " V"; 
+                                color: #00ff00; font-size: 24px; font-weight: 700; 
+                                horizontal-alignment: center; vertical-alignment: center; 
+                            }
+                        }
+                    }
+
+                    // 右邊：電流卡片
+                    Card {
+                        title: "CURRENT LIMIT";
+                        HorizontalBox {
+                            spacing: 5px;
+                            Text { text: "Set A:"; vertical-alignment: center; color: white; }
+                            StepButton { text: "-"; clicked => { root.adjust_current(-0.01); } }
+                            in-curr := LineEdit { text <=> root.target-current; horizontal-alignment: center; }
+                            StepButton { text: "+"; clicked => { root.adjust_current(0.01); } }
+                        }
+                        Button {
+                            text: "APPLY OCP";
+                            enabled: root.status-text == "Connected";
+                            clicked => { root.apply_current(root.target-current); }
+                        }
+                        Rectangle { height: 1px; background: #444; } 
+                        HorizontalBox {
+                            Button {
+                                text: "READ I"; width: 80px; enabled: root.status-text == "Connected";
+                                clicked => { root.read_current(); }
+                            }
+                            Text { 
+                                text: root.current-reading + " A"; 
+                                color: #00ffff; font-size: 24px; font-weight: 700; 
+                                horizontal-alignment: center; vertical-alignment: center; 
+                            }
                         }
                     }
                 }
 
-                // --- 右邊：電流卡片 ---
-                Card {
-                    title: "CURRENT LIMIT";
-                    // 設定區
-                    HorizontalBox {
-                        spacing: 5px;
-                        Text { text: "Set A:"; vertical-alignment: center; color: white; }
-                        StepButton { text: "-"; clicked => { root.adjust_current(-0.01); } }
-                        in-curr := LineEdit { text <=> root.target-current; horizontal-alignment: center; }
-                        StepButton { text: "+"; clicked => { root.adjust_current(0.01); } }
-                    }
-                    Button {
-                        text: "APPLY OCP";
-                        enabled: root.status-text == "Connected";
-                        clicked => { root.apply_current(root.target-current); }
-                    }
+                // --- Tab 1: 自動波形 ---
+                if root.active-tab == 1 : Card {
+                    title: "AUTO CYCLE (SQUARE WAVE GENERATOR)";
+                    
+                    // 用 VerticalLayout 讓內容置中並有內距
+                    VerticalLayout { 
+                        padding: 20px;
+                        spacing: 20px;
+                        alignment: start;
 
-                    Rectangle { height: 1px; background: #444; } 
-
-                    // 電流讀取區
-                    HorizontalBox {
-                        Button {
-                            text: "READ I"; width: 80px; enabled: root.status-text == "Connected";
-                            clicked => { root.read_current(); }
-                        }
                         Text { 
-                            text: root.current-reading + " A"; 
-                            color: #00ffff; // 青色字
-                            font-size: 24px; font-weight: 700; 
-                            horizontal-alignment: center; vertical-alignment: center; 
+                            text: "Configure the square wave parameters below.\nThe PSU will toggle between Voltage A and B."; 
+                            color: #888; wrap: word-wrap; 
+                        }
+
+                        HorizontalBox {
+                            spacing: 30px;
+                            
+                            // 參數設定區
+                            HorizontalBox {
+                                spacing: 10px;
+                                Text { text: "Volt A:"; vertical-alignment: center; color: white; }
+                                loop-va := LineEdit { text: "5.0"; width: 80px; horizontal-alignment: center; font-size: 16px; }
+                            }
+                            
+                            HorizontalBox {
+                                spacing: 10px;
+                                Text { text: "Volt B:"; vertical-alignment: center; color: white; }
+                                loop-vb := LineEdit { text: "0.0"; width: 80px; horizontal-alignment: center; font-size: 16px; }
+                            }
+
+                            HorizontalBox {
+                                spacing: 10px;
+                                Text { text: "Interval (ms):"; vertical-alignment: center; color: white; }
+                                loop-time := LineEdit { text: "1000"; width: 80px; horizontal-alignment: center; font-size: 16px; }
+                            }
+                        }
+
+                        // 大顆的啟動按鈕
+                        Button {
+                            text: root.is-looping ? "STOP WAVEFORM LOOP" : "START WAVEFORM LOOP";
+                            height: 60px;
+                            primary: !root.is-looping; 
+                            enabled: root.status-text == "Connected";
+                            clicked => {
+                                root.toggle_loop(loop-va.text, loop-vb.text, loop-time.text.to-float());
+                            }
+                        }
+
+                        // 狀態提示
+                        Text {
+                            text: root.is-looping ? "State: Running..." : "State: Stopped";
+                            color: root.is-looping ? #00ff00 : #666;
+                            horizontal-alignment: center;
                         }
                     }
                 }
             }
 
-            // 3. 底部功能區
+            // 4. [共用區] 底部功能區
             HorizontalBox {
                 height: 50px; spacing: 20px;
                 Button { text: "OUTPUT ON"; primary: true; enabled: root.status-text == "Connected"; clicked => { root.send_command("ON"); } }
@@ -151,15 +251,12 @@ export component AppWindow inherits Window {
                 Button { text: "Factory Reset"; enabled: root.status-text == "Connected"; clicked => { root.show-reset-confirm = true; } }
             }
 
-            // 4. 最底部的機器資訊顯示區
-            // 使用 VerticalLayout + alignment 來置中，並加上一點邊距
+            // 5. 底部資訊
             VerticalLayout {
                 alignment: center;
                 Text {
                     text: root.device-info;
-                    color: #666666; // 深灰色，低調一點
-                    font-size: 12px;
-                    horizontal-alignment: center;
+                    color: #666666; font-size: 12px; horizontal-alignment: center;
                 }
             }
         }
