@@ -10,7 +10,3 @@ anyhow = "1.0"
 
 [build-dependencies]
 slint-build = "1.0"
-
-[target.x86_64-pc-windows-msvc]
-linker = "link.exe"
-rustflags = ["-C", "target-feature=+crt-static"]
