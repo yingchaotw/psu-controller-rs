@@ -1,286 +1,286 @@
-import { Button, VerticalBox, LineEdit, HorizontalBox, ComboBox } from "std-widgets.slint";
+import { Button, VerticalBox, LineEdit, HorizontalBox, ComboBox, TabWidget, CheckBox } from "std-widgets.slint";
 
-// 自訂元件 Card
+// 自訂元件 Card (保持不變)
 component Card inherits Rectangle {
     in property <string> title: "";
-    background: #2c2c2c; border-radius: 8px; border-width: 1px; border-color: #444444;
+    background: #2c2c2c; 
+    border-radius: 8px; 
+    border-width: 1px;
+    border-color: #444444;
     VerticalBox {
-        padding: 10px; spacing: 10px;
+        padding: 8px; spacing: 8px;
         Text { text: root.title; font-size: 14px; font-weight: 700; color: #ffffff; }
         @children
     }
 }
 
-// 微調按鈕
-component StepButton inherits Button { width: 30px; height: 30px; }
-
-// [修正] 自訂頁籤按鈕 (Tab Button)
-component TabButton inherits Rectangle {
-    in property <string> text;
-    in property <bool> active: false;
-    callback clicked;
-
-    width: 50%; 
-    height: 40px;
-    
-    // 背景色
-    background: root.active ? #3c3c3c : #1c1c1c;
-
-    // 文字
-    Text { 
-        text: root.text; 
-        color: root.active ? #ffffff : #888888; 
-        font-weight: root.active ? 700 : 400;
-        vertical-alignment: center; horizontal-alignment: center;
-    }
-    
-    // [修正點] 用一個獨立的 Rectangle 來模擬底部邊框
-    Rectangle {
-        width: 100%;
-        height: 2px;
-        y: parent.height - self.height; // 貼在最底部
-        background: root.active ? #00aaff : #333333; // 選中變藍，未選中變灰
-    }
-
-    TouchArea { clicked => { root.clicked(); } }
-}
-
 export component AppWindow inherits Window {
-    title: "Rust PSU Controller";
-    width: 750px; 
-    height: 600px;
-    background: #1c1c1c;
+    title: root.window-title;
+    in-out property <string> window-title: "Rust PSU Controller";
+
+    width: 800px;
+    height: 600px; 
+    background: #1c1c1c; 
 
     // --- 屬性 ---
     in-out property <[string]> available-ports: []; 
     in-out property <string> selected-port;
     in-out property <string> status-text: "Disconnected";
     in-out property <brush> status-color: #ff5555;
+    in-out property <string> message-text: "---";
+    in-out property <bool> show-settings: false;
+    in-out property <bool> is-looping: false;
     
+    // [新增] 是否開啟自動重新整理 (預設 true)
+    in-out property <bool> enable-auto-refresh: true;
+
+    // [新增] 記錄 Output 是否開啟
+    in-out property <bool> is-output-on: false;
+
     in-out property <string> voltage-reading: "---";
     in-out property <string> current-reading: "---";
-
     in-out property <string> target-voltage: "12.00";
-    in-out property <string> target-current: "2.00";
-    in-out property <bool> show-reset-confirm: false;
-
-    in-out property <string> device-info: "Device Info: ---";
-    in-out property <bool> is-looping: false;
-
-    // 目前的頁籤索引 (0: Manual, 1: Auto)
-    in-out property <int> active-tab: 0;
+    in-out property <string> target-current: "1.000";
 
     // --- Callbacks ---
-    callback send_command(string);
     callback toggle_connection();
-    callback adjust_voltage(float); 
-    callback adjust_current(float);
-    callback apply_voltage(string);     
-    callback apply_current(string);     
-    callback confirm_reset();           
+    callback send_command(string);
+    callback read_all();
     callback read_voltage();
     callback read_current();
-    callback toggle_loop(string, string, int); 
+    callback apply_voltage(string);
+    callback apply_current(string);
+    callback adjust_voltage(float);
+    callback adjust_current(float);
+    callback confirm_reset();
+    callback toggle_loop(string, string, int);
 
-    Rectangle {
-        // === Layer 1: 主介面 ===
-        VerticalBox {
-            padding: 20px; spacing: 20px;
+    // [新增] 當 CheckBox 切換時通知 Rust
+    callback toggle_auto_refresh(bool);
 
-            // 1. [共用區] 頂部連線列
-            HorizontalBox {
-                spacing: 10px; alignment: start; 
-                Text { text: "Port:"; vertical-alignment: center; color: white; }
-                ComboBox { model: root.available-ports; current-value <=> root.selected-port; width: 160px; }
-                Button {
-                    text: root.status-text == "Connected" ? "Disconnect" : "Connect";
-                    primary: root.status-text != "Connected";
-                    clicked => { root.toggle_connection(); }
-                }
-                // 使用內建 VerticalLayout 置中
-                VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
-                Text { text: root.status-text; vertical-alignment: center; color: #cccccc; }
+    VerticalBox {
+        padding: 15px; spacing: 10px;
+
+        // --- 1. Header ---
+        HorizontalBox {
+            spacing: 10px;
+            Text { text: "Port:"; vertical-alignment: center; color: white; }
+            ComboBox {
+                model: root.available-ports;
+                current-value <=> root.selected-port;
+                width: 150px;
             }
-
-            // 2. 頁籤切換列
-            HorizontalBox {
-                spacing: 0px; 
-                TabButton { 
-                    text: "Manual Control"; 
-                    active: root.active-tab == 0; 
-                    clicked => { root.active-tab = 0; }
-                }
-                TabButton { 
-                    text: "Waveform Gen (Auto)"; 
-                    active: root.active-tab == 1; 
-                    clicked => { root.active-tab = 1; }
+            Button {
+                text: root.status-text == "Connected" ? "Disconnect" : "Connect";
+                primary: root.status-text != "Connected";
+                clicked => { 
+                    if (root.status-text == "Connected") {
+                        root.is-output-on = false;
+                    }
+                    root.toggle_connection(); 
                 }
             }
+            
+            // [新增] 自動更新開關
+            CheckBox {
+                text: "Auto-Poll";
+                checked <=> root.enable-auto-refresh;
+                // 當使用者點擊時，觸發 callback
+                toggled => { root.toggle_auto_refresh(self.checked); }
+            }
 
-            // 3. [切換區] 內容顯示
-            Rectangle {
-                // --- Tab 0: 手動控制 ---
-                if root.active-tab == 0 : HorizontalBox {
-                    spacing: 20px;
+            VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
+            Button { text: "⚙ Sys"; width: 60px; clicked => { root.show-settings = true; } }
+        }
 
-                    // 左邊：電壓卡片
-                    Card {
-                        title: "VOLTAGE CONTROL";
-                        HorizontalBox {
-                            spacing: 5px;
-                            Text { text: "Set V:"; vertical-alignment: center; color: white; }
-                            StepButton { text: "-"; clicked => { root.adjust_voltage(-0.1); } }
-                            in-volt := LineEdit { text <=> root.target-voltage; horizontal-alignment: center; }
-                            StepButton { text: "+"; clicked => { root.adjust_voltage(0.1); } }
-                        }
-                        Button {
-                            text: "APPLY Voltage";
-                            enabled: root.status-text == "Connected";
-                            clicked => { root.apply_voltage(root.target-voltage); }
-                        }
-                        Rectangle { height: 1px; background: #444; }
-                        HorizontalBox {
-                            Button {
-                                text: "READ V"; width: 80px; enabled: root.status-text == "Connected";
-                                clicked => { root.read_voltage(); }
-                            }
-                            Text { 
-                                text: root.voltage-reading + " V"; 
-                                color: #00ff00; font-size: 24px; font-weight: 700; 
-                                horizontal-alignment: center; vertical-alignment: center; 
-                            }
-                        }
-                    }
-
-                    // 右邊：電流卡片
-                    Card {
-                        title: "CURRENT LIMIT";
-                        HorizontalBox {
-                            spacing: 5px;
-                            Text { text: "Set A:"; vertical-alignment: center; color: white; }
-                            StepButton { text: "-"; clicked => { root.adjust_current(-0.01); } }
-                            in-curr := LineEdit { text <=> root.target-current; horizontal-alignment: center; }
-                            StepButton { text: "+"; clicked => { root.adjust_current(0.01); } }
-                        }
-                        Button {
-                            text: "APPLY OCP";
-                            enabled: root.status-text == "Connected";
-                            clicked => { root.apply_current(root.target-current); }
-                        }
-                        Rectangle { height: 1px; background: #444; } 
-                        HorizontalBox {
-                            Button {
-                                text: "READ I"; width: 80px; enabled: root.status-text == "Connected";
-                                clicked => { root.read_current(); }
-                            }
-                            Text { 
-                                text: root.current-reading + " A"; 
-                                color: #00ffff; font-size: 24px; font-weight: 700; 
-                                horizontal-alignment: center; vertical-alignment: center; 
-                            }
-                        }
-                    }
-                }
-
-                // --- Tab 1: 自動波形 ---
-                if root.active-tab == 1 : Card {
-                    title: "AUTO CYCLE (SQUARE WAVE GENERATOR)";
+        // --- 2. Tabs ---
+        TabWidget {
+            Tab {
+                title: "Manual Control";
+                HorizontalBox {
+                    spacing: 15px; padding: 15px;
                     
-                    // 用 VerticalLayout 讓內容置中並有內距
-                    VerticalLayout { 
-                        padding: 20px;
-                        spacing: 20px;
-                        alignment: start;
-
-                        Text { 
-                            text: "Configure the square wave parameters below.\nThe PSU will toggle between Voltage A and B."; 
-                            color: #888; wrap: word-wrap; 
+                    // Voltage Card
+                    Card {
+                        title: "VOLTAGE (V)";
+                        Rectangle {
+                            background: #111; border-radius: 4px; height: 45px;
+                            Text { text: root.voltage-reading; color: #00ff00; font-size: 26px; font-weight: 700; x: 10px; vertical-alignment: center; }
+                            TouchArea { clicked => { root.read_voltage(); } }
                         }
-
                         HorizontalBox {
-                            spacing: 30px;
-                            
-                            // 參數設定區
-                            HorizontalBox {
-                                spacing: 10px;
-                                Text { text: "Volt A:"; vertical-alignment: center; color: white; }
-                                loop-va := LineEdit { text: "5.0"; width: 80px; horizontal-alignment: center; font-size: 16px; }
-                            }
-                            
-                            HorizontalBox {
-                                spacing: 10px;
-                                Text { text: "Volt B:"; vertical-alignment: center; color: white; }
-                                loop-vb := LineEdit { text: "0.0"; width: 80px; horizontal-alignment: center; font-size: 16px; }
-                            }
-
-                            HorizontalBox {
-                                spacing: 10px;
-                                Text { text: "Interval (ms):"; vertical-alignment: center; color: white; }
-                                loop-time := LineEdit { text: "1000"; width: 80px; horizontal-alignment: center; font-size: 16px; }
-                            }
+                            spacing: 5px;
+                            Text { text: "Set:"; color: white; vertical-alignment: center; width: 30px;}
+                            in-volt := LineEdit { text <=> root.target-voltage; }
+                            Button { text: "Apply"; width: 60px; clicked => { root.apply_voltage(in-volt.text); } }
                         }
-
-                        // 大顆的啟動按鈕
-                        Button {
-                            text: root.is-looping ? "STOP WAVEFORM LOOP" : "START WAVEFORM LOOP";
-                            height: 60px;
-                            primary: !root.is-looping; 
-                            enabled: root.status-text == "Connected";
-                            clicked => {
-                                root.toggle_loop(loop-va.text, loop-vb.text, loop-time.text.to-float());
-                            }
+                        HorizontalBox {
+                            spacing: 5px;
+                            Button { text: "-0.1V"; clicked => { root.adjust_voltage(-0.1); } }
+                            Button { text: "+0.1V"; clicked => { root.adjust_voltage(0.1); } }
                         }
+                        Rectangle { vertical-stretch: 1; }
+                    }
 
-                        // 狀態提示
-                        Text {
-                            text: root.is-looping ? "State: Running..." : "State: Stopped";
-                            color: root.is-looping ? #00ff00 : #666;
-                            horizontal-alignment: center;
+                    // Current Card
+                    Card {
+                        title: "CURRENT (A)";
+                        Rectangle {
+                            background: #111; border-radius: 4px; height: 45px;
+                            Text { text: root.current-reading; color: #00ffff; font-size: 26px; font-weight: 700; x: 10px; vertical-alignment: center; }
+                            TouchArea { clicked => { root.read_current(); } }
                         }
+                        HorizontalBox {
+                            spacing: 5px;
+                            Text { text: "Lim:"; color: white; vertical-alignment: center; width: 30px;}
+                            in-curr := LineEdit { text <=> root.target-current; }
+                            Button { text: "Apply"; width: 60px; clicked => { root.apply_current(in-curr.text); } }
+                        }
+                        HorizontalBox {
+                            spacing: 5px;
+                            Button { text: "-10mA"; clicked => { root.adjust_current(-0.01); } }
+                            Button { text: "+10mA"; clicked => { root.adjust_current(0.01); } }
+                        }
+                        Rectangle { vertical-stretch: 1; }
                     }
                 }
             }
 
-            // 4. [共用區] 底部功能區
-            HorizontalBox {
-                height: 50px; spacing: 20px;
-                Button { text: "OUTPUT ON"; primary: true; enabled: root.status-text == "Connected"; clicked => { root.send_command("ON"); } }
-                Button { text: "OUTPUT OFF"; enabled: root.status-text == "Connected"; clicked => { root.send_command("OFF"); } }
-                Rectangle { width: 20px; }
-                Button { text: "Unlock Panel"; enabled: root.status-text == "Connected"; clicked => { root.send_command("UNLOCK"); } }
-                Button { text: "Factory Reset"; enabled: root.status-text == "Connected"; clicked => { root.show-reset-confirm = true; } }
-            }
-
-            // 5. 底部資訊
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.device-info;
-                    color: #666666; font-size: 12px; horizontal-alignment: center;
+            Tab {
+                title: "Auto Loop";
+                VerticalBox {
+                    padding: 20px; alignment: start; 
+                    Card {
+                        title: "LOOP CONFIGURATION";
+                        VerticalBox {
+                            spacing: 15px;
+                            Text { text: "Toggle voltage between Level A and B."; color: #ccc; }
+                            HorizontalBox {
+                                Text { text: "Level A (V):"; color: white; vertical-alignment: center; width: 100px;}
+                                loop-va := LineEdit { text: "5.0"; }
+                            }
+                            HorizontalBox {
+                                Text { text: "Level B (V):"; color: white; vertical-alignment: center; width: 100px;}
+                                loop-vb := LineEdit { text: "12.0"; }
+                            }
+                            HorizontalBox {
+                                Text { text: "Interval (ms):"; color: white; vertical-alignment: center; width: 100px;}
+                                loop-ms := LineEdit { text: "1000"; }
+                            }
+                            Rectangle { height: 10px; }
+                            Button {
+                                text: root.is-looping ? "🛑 STOP LOOP" : "▶ START LOOP";
+                                primary: root.is-looping; height: 50px;
+                                clicked => { root.toggle_loop(loop-va.text, loop-vb.text, loop-ms.text.to-float()); }
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // === Layer 2: 確認視窗 (Overlay) ===
-        if root.show-reset-confirm : Rectangle {
-            background: #000000aa;
-            TouchArea { clicked => { root.show-reset-confirm = false; } }
-            Rectangle {
-                width: 320px; height: 180px; background: #2c2c2c; border-radius: 12px; border-width: 1px; border-color: #555;
-                x: (parent.width - self.width) / 2; y: (parent.height - self.height) / 2;
-                VerticalBox {
-                    padding: 20px; spacing: 20px; alignment: center;
-                    Text { text: "⚠️ Confirm Reset?"; color: white; font-size: 20px; font-weight: 700; horizontal-alignment: center; }
-                    Text { text: "Restore factory settings?"; color: #ccc; horizontal-alignment: center; }
-                    HorizontalBox {
-                        spacing: 20px; alignment: center;
-                        Button { text: "Cancel"; width: 100px; clicked => { root.show-reset-confirm = false; } }
-                        Rectangle {
-                            width: 100px; height: 32px; background: #ff5555; border-radius: 4px;
-                            Text { text: "RESET"; color: white; font-weight: 700; x: (parent.width - self.width)/2; y: (parent.height - self.height)/2; }
-                            TouchArea { clicked => { root.show-reset-confirm = false; root.confirm_reset(); } }
-                        }
+        // --- 3. Footer (Output Control) ---
+        HorizontalBox {
+            height: 50px; spacing: 20px;
+            
+            // [修改重點] OUTPUT ON 按鈕
+            Button {
+                text: "OUTPUT ON"; 
+                // 只有當 is-output-on 為 true 時，才顯示亮色 (primary)
+                // 否則顯示跟 OFF 一樣的灰色
+                primary: root.is-output-on; 
+                enabled: root.status-text == "Connected";
+                clicked => { 
+                    // 按下時，變更狀態為 true
+                    root.is-output-on = true;
+                    root.send_command("OUTP ON"); 
+                }
+            }
+            
+            // [修改重點] OUTPUT OFF 按鈕
+            Button {
+                text: "OUTPUT OFF"; 
+                enabled: root.status-text == "Connected";
+                clicked => { 
+                    // 按下時，變更狀態為 false
+                    root.is-output-on = false;
+                    root.send_command("OUTP OFF"); 
+                }
+            }
+        }
+    }
+
+    // === Settings Overlay ===
+    Rectangle {
+        visible: root.show-settings;
+        background: #000000aa; // 背景變暗
+        TouchArea {} // 阻擋點擊穿透
+
+        Rectangle {
+            width: 340px; // 稍微加寬一點以容納按鈕
+            height: 380px; // 加高以容納新功能
+            background: #333; 
+            border-radius: 12px; 
+            border-color: #555; 
+            border-width: 2px;
+            
+            VerticalBox {
+                padding: 20px; 
+                spacing: 15px;
+                
+                // 標題
+                Text { 
+                    text: "System Settings"; 
+                    font-size: 18px; 
+                    font-weight: 700; 
+                    color: white; 
+                    horizontal-alignment: center; 
+                }
+                
+                Rectangle { height: 1px; background: #666; }
+                
+                // --- [新增功能] 蜂鳴器控制 ---
+                Text { text: "Beeper Control"; color: #ccc; font-size: 14px; }
+                HorizontalBox {
+                    spacing: 10px;
+                    Button {
+                        text: "🔊 Beep ON";
+                        clicked => { root.send_command("SYST:CONF:BEEP ON"); }
                     }
+                    Button {
+                        text: "🔇 Mute (OFF)";
+                        // 這裡使用您提供的指令
+                        clicked => { root.send_command("SYST:CONF:BEEP OFF"); }
+                    }
+                }
+
+                Rectangle { height: 5px; } // 間隔
+                
+                // --- 面板控制 ---
+                Text { text: "Panel Control"; color: #ccc; font-size: 14px; }
+                Button { 
+                    text: "Unlock Panel (Local)"; 
+                    clicked => { root.send_command("SYST:LOC"); } 
+                }
+                
+                Rectangle { height: 5px; }
+                
+                // --- 危險區域 ---
+                Text { text: "Danger Zone"; color: #ff5555; font-size: 14px; }
+                Button {
+                    text: "⚠️ Factory Reset (*RST)";
+                    clicked => { 
+                        root.is-output-on = false; // Reset 會關閉輸出，同步 UI 狀態
+                        root.confirm_reset();
+                        root.show-settings = false;
+                    }
+                }
+                
+                Rectangle { vertical-stretch: 1; } // 把關閉按鈕推到底部
+                
+                Button { 
+                    text: "Close Menu"; 
+                    clicked => { root.show-settings = false; } 
                 }
             }
         }

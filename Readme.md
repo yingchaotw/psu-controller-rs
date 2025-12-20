@@ -1,31 +1,50 @@
 # psu-controller-rs ⚡️
 
-[](https://www.rust-lang.org/)
-[](https://slint.dev/)
 
-![alt text](img/image.png)
+<img src="./img/manual_ctrl.png" width="600" alt="manual control" />
+<img src="./img/auto_loop.png" width="600" alt="auto loop" />
 
 A cross-platform power supply control software built with **Rust** and **Slint**.
 
 Communicating via **SCPI (Standard Commands for Programmable Instruments)** over Serial Port (USB/RS-232), it provides a lightweight, high-performance, and modern interface for hardware engineers to control programmable power supplies.
 
-## ✨ Features
+## ✨ Features (特色功能)
 
-  * **🚀 Blazing Fast & Lightweight**: Written in Rust and natively compiled. No heavy runtimes (like Python or JVM) required.
-  * **🎨 Modern Dark Mode**: Designed for engineers working long hours. Features a high-contrast dark theme for clear readability without eye strain.
-  * **🔌 Auto Port Detection**: Automatically scans and lists available COM Port / TTY devices upon startup.
-  * **🎛 Comprehensive Control**:
-      * **Voltage/Current Set**: Supports `VOLT` and `CURR` commands.
-      * **Real-time Readout**: One-click readback of actual current values (`MEAS:CURR?`).
-      * **Safety Mechanisms**: Supports Output toggling (`OUTP ON/OFF`) and Panel Unlock (`SYST:LOC`).
-  * **🖥 Responsive Layout**: Slint-based dashboard design that automatically adapts to window resizing.
+### 🖥 Professional GUI (專業監控介面)
+
+* **Modern Dark Mode**: High-contrast dark theme designed for engineering environments to reduce eye strain.
+* **Tabbed Interface**: Organized layout separating **Manual Control** and **Auto Loop** functions.
+* **Dynamic Window Title**: Automatically displays the connected device's model and version info (IDN).
+
+### ⚡️ Precision Control (精準控制)
+
+* **Coarse / Fine Tuning**:
+* Voltage: `±1V` (Coarse) / `±0.01V` (Fine) steps.
+* Current: `±100mA` (Coarse) / `±1mA` (Fine) steps.
+
+
+* **Real-time Monitoring**:
+* **Auto-Poll**: Checkbox to toggle 1s interval automatic background polling (`MEAS:ALL?`).
+* **Manual Refresh**: One-click instantaneous readback.
+
+
+
+### 🔄 Automation (自動化測試)
+
+* **Waveform Loop**: Built-in square wave generator that toggles between Voltage A and Voltage B at a specified millisecond interval.
+
+### 🛡 Safety & System (安全防護)
+
+* **Smart Output Status**: Output buttons change color (Blue/Gray) to reflect the actual power state.
+* **Auto-Unlock**: Automatically sends `SYST:LOC` to unlock the device panel upon disconnection.
+* **System Settings**: Dedicated menu for **Beeper Control** and **Factory Reset (*RST)** to prevent accidental operations.
 
 ## 🛠 Tech Stack
 
-  * **Language**: [Rust](https://www.rust-lang.org/)
-  * **GUI Framework**: [Slint](https://slint.dev/) (Lightweight, suitable for embedded and desktop applications)
-  * **Serial Communication**: `serialport` crate
-  * **Error Handling**: `anyhow`
+* **Language**: [Rust](https://www.rust-lang.org/)
+* **GUI Framework**: [Slint](https://slint.dev/) (Lightweight, suitable for embedded and desktop applications)
+* **Serial Communication**: `serialport` crate
+* **Error Handling**: `anyhow`
 
 ## 📦 Installation & Run
 
@@ -35,57 +54,67 @@ Ensure you have the [Rust Toolchain](https://rustup.rs/) installed.
 
 ### Build and Run
 
-1.  Clone the repository:
+1. Clone the repository:
+```bash
+git clone https://github.com/yingchaotw/psu-controller-rs.git
+cd psu-controller-rs
 
-    ```bash
-    git clone https://github.com/yingchaotw/psu-controller-rs.git
-    cd psu-controller-rs
-    ```
+```
 
-2.  Run the application:
 
-    ```bash
-    cargo run --release
-    ```
+2. Run the application:
+```bash
+cargo run --release
 
-> **Note**: Linux/macOS users encountering "Permission Denied" errors should ensure the current user has access to USB devices (e.g., add the user to the `dialout` group or temporarily use `sudo`).
+```
+
+
+> **Note for Linux/macOS users**: If you encounter "Permission Denied", add your user to the `dialout` group or use `sudo`.
+
+
 
 ## 📖 Usage Guide
 
-1.  **Connect Hardware**: Connect your SCPI-supported power supply via USB.
-2.  **Select Port**: Choose the corresponding COM Port from the dropdown menu in the top-left corner.
-3.  **Connect**: Click **Connect**. The status indicator will turn green upon a successful connection.
-4.  **Set Parameters**:
-      * Enter target voltage in **Voltage Control** (e.g., `12.0`) and click **SET Voltage**.
-      * Enter current limit in **Current Monitor** (e.g., `1.5`) and click **SET OCP**.
-5.  **Enable Output**: Click the large **OUTPUT ON** button at the bottom to enable power output.
-6.  **Read Values**: Click the **READ** button; the actual current return value will be displayed on the right.
-7.  **Disconnect**: Click **Disconnect**. The software will automatically send `SYST:LOC` to unlock the device panel before disconnecting.
+1. **Connect Hardware**: Connect your SCPI-supported PSU via USB.
+2. **Select Port**: Choose the COM Port from the top dropdown.
+3. **Connect**: Click **Connect**. The window title will update with the device model.
+4. **Manual Control (Tab 1)**:
+* Use **Coarse/Fine** buttons to adjust Voltage and Current limits.
+* Click **Apply** to set specific values.
+* Check **Auto-Poll** in the header for continuous monitoring.
+
+
+5. **Auto Loop (Tab 2)**:
+* Set **Level A**, **Level B**, and **Interval (ms)**.
+* Click **START LOOP** to begin automated voltage toggling.
+
+
+6. **Output Control**: Use the global **OUTPUT ON/OFF** buttons at the bottom. The ON button turns **Blue** when active.
+7. **System Settings**: Click the **⚙ Sys** button in the top-right to access Beeper control or Factory Reset.
 
 ## 🔌 Hardware Compatibility
 
-This software supports most Programmable DC Power Supplies that follow the SCPI standard (IEEE 488.2), including but not limited to:
+Supports most Programmable DC Power Supplies following the SCPI standard (IEEE 488.2), including:
 
-  * **Keysight / Agilent** (E36xx series, etc.)
-  * **Rigol** (DP800 series, etc.)
-  * **Siglent** (SPD series)
-  * **GW Instek**
-  * **Keithley**
-
-*Please ensure your device supports SCPI commands via Serial Port (Virtual COM).*
+* **Keysight / Agilent** (E36xx series)
+* **Rigol** (DP800 series)
+* **Siglent** (SPD series)
+* **GW Instek**
+* **Keithley**
 
 ## 📂 Project Structure
 
 ```text
 psu-controller-rs/
-├── Cargo.toml              # Dependency configuration
+├── Cargo.toml              # Dependencies
 ├── build.rs                # Slint build script
 ├── src/
-│   └── main.rs             # Main logic (Serial communication)
+│   └── main.rs             # Main logic (Serial, Timer, Threads)
 └── ui/
-    └── appwindow.slint     # UI layout and styling definitions
+    └── appwindow.slint     # UI layout (Tabs, Cards, Styling)
+
 ```
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://www.google.com/search?q=LICENSE) file for details.
