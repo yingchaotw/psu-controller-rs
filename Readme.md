@@ -1,5 +1,6 @@
 # psu-controller-rs ⚡️
 
+[![Rust Build Pipeline](https://github.com/yingchaotw/psu-controller-rs/actions/workflows/build.yml/badge.svg)](https://github.com/yingchaotw/psu-controller-rs/actions/workflows/build.yml)
 
 <img src="./img/manual_ctrl.png" width="600" alt="manual control" />
 <img src="./img/auto_loop.png" width="600" alt="auto loop" />
@@ -8,15 +9,15 @@ A cross-platform power supply control software built with **Rust** and **Slint**
 
 Communicating via **SCPI (Standard Commands for Programmable Instruments)** over Serial Port (USB/RS-232), it provides a lightweight, high-performance, and modern interface for hardware engineers to control programmable power supplies.
 
-## ✨ Features (特色功能)
+## ✨ Features 
 
-### 🖥 Professional GUI (專業監控介面)
+### 🖥 Professional GUI 
 
 * **Modern Dark Mode**: High-contrast dark theme designed for engineering environments to reduce eye strain.
 * **Tabbed Interface**: Organized layout separating **Manual Control** and **Auto Loop** functions.
 * **Dynamic Window Title**: Automatically displays the connected device's model and version info (IDN).
 
-### ⚡️ Precision Control (精準控制)
+### ⚡️ Precision Control 
 
 * **Coarse / Fine Tuning**:
 * Voltage: `±1V` (Coarse) / `±0.01V` (Fine) steps.
@@ -27,13 +28,11 @@ Communicating via **SCPI (Standard Commands for Programmable Instruments)** over
 * **Auto-Poll**: Checkbox to toggle 1s interval automatic background polling (`MEAS:ALL?`).
 * **Manual Refresh**: One-click instantaneous readback.
 
-
-
-### 🔄 Automation (自動化測試)
+### 🔄 Automation 
 
 * **Waveform Loop**: Built-in square wave generator that toggles between Voltage A and Voltage B at a specified millisecond interval.
 
-### 🛡 Safety & System (安全防護)
+### 🛡 Safety & System 
 
 * **Smart Output Status**: Output buttons change color (Blue/Gray) to reflect the actual power state.
 * **Auto-Unlock**: Automatically sends `SYST:LOC` to unlock the device panel upon disconnection.

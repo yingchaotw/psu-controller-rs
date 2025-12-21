@@ -1,4 +1,11 @@
 fn main() {
-    // 這行指令會告訴 Cargo：去編譯 ui/appwindow.slint 這個檔案
+    // Slint 的編譯設定
     slint_build::compile("ui/appwindow.slint").unwrap();
+
+    // [新增] Windows 圖示設定
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
+        let mut res = winres::WindowsResource::new();
+        res.set_icon("img/icon.ico"); // 確保這裡檔名對應您的 ico 檔
+        res.compile().unwrap();
+    }
 }
