@@ -1,0 +1,48 @@
+// ui/components/settings_overlay.slint
+import { Button, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export component SettingsOverlay inherits Rectangle {
+    in property <bool> visible-flag: false;
+    callback close();
+    callback send-cmd(string);
+    callback trigger-reset();
+
+    visible: root.visible-flag;
+    background: #000000aa; 
+    TouchArea {} 
+
+    Rectangle {
+        width: 340px; height: 380px;
+        background: #333; border-radius: 12px; border-color: #555; border-width: 2px;
+        
+        VerticalBox {
+            padding: 20px; spacing: 15px;
+            
+            Text { text: "System Settings"; font-size: 18px; font-weight: 700; color: white; horizontal-alignment: center; }
+            Rectangle { height: 1px; background: #666; }
+            
+            Text { text: "Beeper Control"; color: #ccc; font-size: 14px; }
+            HorizontalBox {
+                spacing: 10px;
+                Button { text: "🔊 Beep ON"; clicked => { root.send-cmd("SYST:CONF:BEEP ON"); } }
+                Button { text: "🔇 Mute (OFF)"; clicked => { root.send-cmd("SYST:CONF:BEEP OFF"); } }
+            }
+
+            Rectangle { height: 5px; }
+            
+            Text { text: "Panel Control"; color: #ccc; font-size: 14px; }
+            Button { text: "Unlock Panel (Local)"; clicked => { root.send-cmd("SYST:LOC"); } }
+            
+            Rectangle { height: 5px; }
+            
+            Text { text: "Danger Zone"; color: #ff5555; font-size: 14px; }
+            Button {
+                text: "⚠️ Factory Reset (*RST)";
+                clicked => { root.trigger-reset(); }
+            }
+            
+            Rectangle { vertical-stretch: 1; }
+            Button { text: "Close Menu"; clicked => { root.close(); } }
+        }
+    }
+}

@@ -1,0 +1,20 @@
+// ui/components/chart.slint
+import { Theme } from "../theme.slint";
+
+export component TrendChart inherits Rectangle {
+    // 🔴 [修改] 改成接收字串
+    in property <string> chart-path; 
+    in property <brush> line-color: #00ff00;
+    
+    background: Theme.display-bg;
+    border-radius: 4px;
+    clip: true;
+
+    Path {
+        stroke: root.line-color;
+        stroke-width: 2px;
+        
+        // 🔴 [修改] 直接使用 SVG 指令字串
+        commands: root.chart-path;
+    }
+}

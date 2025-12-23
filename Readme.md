@@ -19,10 +19,13 @@ Communicating via **SCPI (Standard Commands for Programmable Instruments)** over
 
 ### ⚡️ Precision Control 
 
-* **Coarse / Fine Tuning**:
-* Voltage: `±1V` (Coarse) / `±0.01V` (Fine) steps.
-* Current: `±100mA` (Coarse) / `±1mA` (Fine) steps.
+* **Intuitive Scroll Control**:
+  * Adjust Voltage/Current effortlessly by hovering and scrolling the mouse wheel.
+  * Voltage: `±0.1V` steps via scroll.
+  * Current: `±0.01A` steps via scroll.
 
+* **Status Indicators**:
+  * Visual **CC (Constant Current)** and **CV (Constant Voltage)** mode feedback directly on the control panel.
 
 * **Real-time Monitoring**:
 * **Auto-Poll**: Checkbox to toggle 1s interval automatic background polling (`MEAS:ALL?`).
@@ -78,9 +81,9 @@ cargo run --release
 2. **Select Port**: Choose the COM Port from the top dropdown.
 3. **Connect**: Click **Connect**. The window title will update with the device model.
 4. **Manual Control (Tab 1)**:
-* Use **Coarse/Fine** buttons to adjust Voltage and Current limits.
-* Click **Apply** to set specific values.
-* Check **Auto-Poll** in the header for continuous monitoring.
+   * **Hover and Scroll** over the Voltage or Current cards to adjust values.
+   * Click **Apply** to set specific values via the input box.
+   * Observe the **CC/CV** indicators to monitor the power supply mode.
 
 
 5. **Auto Loop (Tab 2)**:
@@ -105,13 +108,18 @@ Supports most Programmable DC Power Supplies following the SCPI standard (IEEE 4
 
 ```text
 psu-controller-rs/
-├── Cargo.toml              # Dependencies
-├── build.rs                # Slint build script
+├── Cargo.toml              # Project metadata and dependencies (slint, serialport, etc.)
+├── build.rs                # Build script for compiling Slint files into Rust code
 ├── src/
-│   └── main.rs             # Main logic (Serial, Timer, Threads)
+│   ├── main.rs             # Application entry point: UI event binding and timer logic
+│   └── scpi.rs             # SCPI driver: Command definitions and serial I/O functions
 └── ui/
-    └── appwindow.slint     # UI layout (Tabs, Cards, Styling)
-
+    ├── theme.slint                 # 1. 全域配色設定
+    ├── components/                 # 2. 自訂元件資料夾
+    │   ├── card.slint              #    基礎卡片元件
+    │   ├── value_control.slint     #    數值控制 (電壓/電流) 元件
+    │   └── settings_overlay.slint  #    設定選單元件
+    └── appwindow.slint             # 3. 主視窗 (組裝所有東西)
 ```
 
 ## 📝 License

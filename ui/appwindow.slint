@@ -1,26 +1,17 @@
+// ui/appwindow.slint
 import { Button, VerticalBox, LineEdit, HorizontalBox, ComboBox, TabWidget, CheckBox } from "std-widgets.slint";
-
-// 自訂元件 Card (保持不變)
-component Card inherits Rectangle {
-    in property <string> title: "";
-    background: #2c2c2c; 
-    border-radius: 8px; 
-    border-width: 1px;
-    border-color: #444444;
-    VerticalBox {
-        padding: 8px; spacing: 8px;
-        Text { text: root.title; font-size: 14px; font-weight: 700; color: #ffffff; }
-        @children
-    }
-}
+import { Theme } from "theme.slint";
+import { Card } from "components/card.slint";
+import { ValueControlCard } from "components/value_control.slint";
+import { SettingsOverlay } from "components/settings_overlay.slint";
+import { TrendChart } from "components/chart.slint";
 
 export component AppWindow inherits Window {
     title: root.window-title;
     in-out property <string> window-title: "Rust PSU Controller";
-
     width: 800px;
     height: 600px; 
-    background: #1c1c1c; 
+    background: Theme.background; 
 
     // --- 屬性 ---
     in-out property <[string]> available-ports: []; 
@@ -30,19 +21,20 @@ export component AppWindow inherits Window {
     in-out property <string> message-text: "---";
     in-out property <bool> show-settings: false;
     in-out property <bool> is-looping: false;
-    
-    // [新增] 是否開啟自動重新整理 (預設 true)
     in-out property <bool> enable-auto-refresh: true;
-
-    // [新增] 記錄 Output 是否開啟
     in-out property <bool> is-output-on: false;
+    in-out property <string> psu-mode: "CV"; // 預設 CV
+    in-out property <string> chart-data: "";
+    in-out property <bool> show-chart: false;
 
+    // --- 數值 ---
     in-out property <string> voltage-reading: "---";
     in-out property <string> current-reading: "---";
     in-out property <string> target-voltage: "12.00";
     in-out property <string> target-current: "1.000";
+    in-out property <string> polling-interval: "1000";
 
-    // --- Callbacks ---
+    // --- Callbacks (維持不變) ---
     callback toggle_connection();
     callback send_command(string);
     callback read_all();
@@ -54,14 +46,12 @@ export component AppWindow inherits Window {
     callback adjust_current(float);
     callback confirm_reset();
     callback toggle_loop(string, string, int);
-
-    // [新增] 當 CheckBox 切換時通知 Rust
     callback toggle_auto_refresh(bool);
 
     VerticalBox {
         padding: 15px; spacing: 10px;
 
-        // --- 1. Header ---
+        // --- Header ---
         HorizontalBox {
             spacing: 10px;
             Text { text: "Port:"; vertical-alignment: center; color: white; }
@@ -74,74 +64,83 @@ export component AppWindow inherits Window {
                 text: root.status-text == "Connected" ? "Disconnect" : "Connect";
                 primary: root.status-text != "Connected";
                 clicked => { 
-                    if (root.status-text == "Connected") {
-                        root.is-output-on = false;
-                    }
+                    if (root.status-text == "Connected") { root.is-output-on = false; }
                     root.toggle_connection(); 
                 }
             }
             
-            // [新增] 自動更新開關
-            CheckBox {
-                text: "Auto-Poll";
-                checked <=> root.enable-auto-refresh;
-                // 當使用者點擊時，觸發 callback
-                toggled => { root.toggle_auto_refresh(self.checked); }
+            // [修改] Auto-Poll 區塊
+            HorizontalBox {
+                spacing: 5px;
+
+                CheckBox {
+                    text: "Auto-Poll";
+                    checked <=> root.enable-auto-refresh;
+                    toggled => { root.toggle_auto_refresh(self.checked); }
+                }
+                
+                // [新增] 頻率設定輸入框
+                Text { text: "Interval:"; color: #aaa; vertical-alignment: center; font-size: 12px; }
+                LineEdit { 
+                    text <=> root.polling-interval; 
+                    width: 50px; 
+                    placeholder-text: "ms";
+                    // 當輸入改變且目前正在跑 Auto-Poll 時，重新觸發一次 toggle 來更新 Timer
+                    accepted => { 
+                        if (root.enable-auto-refresh) {
+                            root.toggle_auto_refresh(true);
+                        }
+                    }
+                }
+                Text { text: "ms"; color: #aaa; vertical-alignment: center; font-size: 12px; }
             }
 
             VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
+            
+            Rectangle { horizontal-stretch: 1; }
+
             Button { text: "⚙ Sys"; width: 60px; clicked => { root.show-settings = true; } }
         }
 
-        // --- 2. Tabs ---
+        // --- Tabs ---
         TabWidget {
             Tab {
                 title: "Manual Control";
                 HorizontalBox {
                     spacing: 15px; padding: 15px;
                     
-                    // Voltage Card
-                    Card {
+                    // 1. Voltage (使用元件)
+                    ValueControlCard {
                         title: "VOLTAGE (V)";
-                        Rectangle {
-                            background: #111; border-radius: 4px; height: 45px;
-                            Text { text: root.voltage-reading; color: #00ff00; font-size: 26px; font-weight: 700; x: 10px; vertical-alignment: center; }
-                            TouchArea { clicked => { root.read_voltage(); } }
-                        }
-                        HorizontalBox {
-                            spacing: 5px;
-                            Text { text: "Set:"; color: white; vertical-alignment: center; width: 30px;}
-                            in-volt := LineEdit { text <=> root.target-voltage; }
-                            Button { text: "Apply"; width: 60px; clicked => { root.apply_voltage(in-volt.text); } }
-                        }
-                        HorizontalBox {
-                            spacing: 5px;
-                            Button { text: "-0.1V"; clicked => { root.adjust_voltage(-0.1); } }
-                            Button { text: "+0.1V"; clicked => { root.adjust_voltage(0.1); } }
-                        }
-                        Rectangle { vertical-stretch: 1; }
+                        reading: root.voltage-reading;
+                        reading-color: #55ff55; // 綠色字
+                        unit: "Set";
+                        target-value <=> root.target-voltage;
+
+                        // [連接訊號] 讓電壓卡片也能顯示模式 (選用)
+                        // 如果是 CV 模式，通常電壓是穩定的，顯示在這裡也合理
+                        mode: root.psu-mode;
+                        
+                        request-read => { root.read_voltage(); }
+                        request-apply => { root.apply_voltage(root.target-voltage); }
+                        request-adjust(val) => { root.adjust_voltage(val * 0.1); }
                     }
 
-                    // Current Card
-                    Card {
+                    // 2. Current (使用元件)
+                    ValueControlCard {
                         title: "CURRENT (A)";
-                        Rectangle {
-                            background: #111; border-radius: 4px; height: 45px;
-                            Text { text: root.current-reading; color: #00ffff; font-size: 26px; font-weight: 700; x: 10px; vertical-alignment: center; }
-                            TouchArea { clicked => { root.read_current(); } }
-                        }
-                        HorizontalBox {
-                            spacing: 5px;
-                            Text { text: "Lim:"; color: white; vertical-alignment: center; width: 30px;}
-                            in-curr := LineEdit { text <=> root.target-current; }
-                            Button { text: "Apply"; width: 60px; clicked => { root.apply_current(in-curr.text); } }
-                        }
-                        HorizontalBox {
-                            spacing: 5px;
-                            Button { text: "-10mA"; clicked => { root.adjust_current(-0.01); } }
-                            Button { text: "+10mA"; clicked => { root.adjust_current(0.01); } }
-                        }
-                        Rectangle { vertical-stretch: 1; }
+                        reading: root.current-reading;
+                        reading-color: #55ffff; // 青色字
+                        unit: "Lim";
+                        target-value <=> root.target-current;
+
+                        // [連接訊號] 讓電流卡片顯示模式
+                        // 如果進入 CC 模式，這裡會變紅色 "CC"
+                        mode: root.psu-mode;
+
+                        request-read => { root.read_current(); }
+                        request-apply => { root.apply_current(root.target-current); }
+                        request-adjust(val) => { root.adjust_current(val * 0.01); }
                     }
                 }
             }
@@ -150,11 +149,12 @@ export component AppWindow inherits Window {
                 title: "Auto Loop";
                 VerticalBox {
                     padding: 20px; alignment: start; 
+                    // Card 也可以直接用
                     Card {
                         title: "LOOP CONFIGURATION";
                         VerticalBox {
                             spacing: 15px;
-                            Text { text: "Toggle voltage between Level A and B."; color: #ccc; }
+                            Text { text: "Toggle voltage between Level A and B."; color: Theme.text-secondary; }
                             HorizontalBox {
                                 Text { text: "Level A (V):"; color: white; vertical-alignment: center; width: 100px;}
                                 loop-va := LineEdit { text: "5.0"; }
@@ -179,110 +179,44 @@ export component AppWindow inherits Window {
             }
         }
 
-        // --- 3. Footer (Output Control) ---
+        // [新增] 趨勢圖區塊
+        if (root.show-chart) : VerticalBox {
+            spacing: 5px;
+            Text { 
+                text: "Voltage Trend (10s)"; 
+                color: #aaa; 
+                font-size: 12px; 
+            }
+            TrendChart {
+                height: 100px;
+                line-color: #00ff00;
+                chart-path: root.chart-data;
+            }
+        }
+
+        // --- Footer ---
         HorizontalBox {
             height: 50px; spacing: 20px;
-            
-            // [修改重點] OUTPUT ON 按鈕
             Button {
-                text: "OUTPUT ON"; 
-                // 只有當 is-output-on 為 true 時，才顯示亮色 (primary)
-                // 否則顯示跟 OFF 一樣的灰色
-                primary: root.is-output-on; 
-                enabled: root.status-text == "Connected";
-                clicked => { 
-                    // 按下時，變更狀態為 true
-                    root.is-output-on = true;
-                    root.send_command("OUTP ON"); 
-                }
+                text: "OUTPUT ON"; primary: root.is-output-on; enabled: root.status-text == "Connected";
+                clicked => { root.is-output-on = true; root.send_command("OUTP ON"); }
             }
-            
-            // [修改重點] OUTPUT OFF 按鈕
             Button {
-                text: "OUTPUT OFF"; 
-                enabled: root.status-text == "Connected";
-                clicked => { 
-                    // 按下時，變更狀態為 false
-                    root.is-output-on = false;
-                    root.send_command("OUTP OFF"); 
-                }
+                text: "OUTPUT OFF"; enabled: root.status-text == "Connected";
+                clicked => { root.is-output-on = false; root.send_command("OUTP OFF"); }
             }
         }
     }
 
-    // === Settings Overlay ===
-    Rectangle {
-        visible: root.show-settings;
-        background: #000000aa; // 背景變暗
-        TouchArea {} // 阻擋點擊穿透
-
-        Rectangle {
-            width: 340px; // 稍微加寬一點以容納按鈕
-            height: 380px; // 加高以容納新功能
-            background: #333; 
-            border-radius: 12px; 
-            border-color: #555; 
-            border-width: 2px;
-            
-            VerticalBox {
-                padding: 20px; 
-                spacing: 15px;
-                
-                // 標題
-                Text { 
-                    text: "System Settings"; 
-                    font-size: 18px; 
-                    font-weight: 700; 
-                    color: white; 
-                    horizontal-alignment: center; 
-                }
-                
-                Rectangle { height: 1px; background: #666; }
-                
-                // --- [新增功能] 蜂鳴器控制 ---
-                Text { text: "Beeper Control"; color: #ccc; font-size: 14px; }
-                HorizontalBox {
-                    spacing: 10px;
-                    Button {
-                        text: "🔊 Beep ON";
-                        clicked => { root.send_command("SYST:CONF:BEEP ON"); }
-                    }
-                    Button {
-                        text: "🔇 Mute (OFF)";
-                        // 這裡使用您提供的指令
-                        clicked => { root.send_command("SYST:CONF:BEEP OFF"); }
-                    }
-                }
-
-                Rectangle { height: 5px; } // 間隔
-                
-                // --- 面板控制 ---
-                Text { text: "Panel Control"; color: #ccc; font-size: 14px; }
-                Button { 
-                    text: "Unlock Panel (Local)"; 
-                    clicked => { root.send_command("SYST:LOC"); } 
-                }
-                
-                Rectangle { height: 5px; }
-                
-                // --- 危險區域 ---
-                Text { text: "Danger Zone"; color: #ff5555; font-size: 14px; }
-                Button {
-                    text: "⚠️ Factory Reset (*RST)";
-                    clicked => { 
-                        root.is-output-on = false; // Reset 會關閉輸出，同步 UI 狀態
-                        root.confirm_reset();
-                        root.show-settings = false;
-                    }
-                }
-                
-                Rectangle { vertical-stretch: 1; } // 把關閉按鈕推到底部
-                
-                Button { 
-                    text: "Close Menu"; 
-                    clicked => { root.show-settings = false; } 
-                }
-            }
+    // --- Overlay ---
+    SettingsOverlay {
+        visible-flag: root.show-settings;
+        close => { root.show-settings = false; }
+        send-cmd(cmd) => { root.send_command(cmd); }
+        trigger-reset => {
+            root.is-output-on = false;
+            root.confirm_reset();
+            root.show-settings = false;
         }
     }
 }

@@ -1,0 +1,22 @@
+// ui/components/card.slint
+import { VerticalBox } from "std-widgets.slint";
+import { Theme } from "../theme.slint"; // 往上一層找 theme
+
+export component Card inherits Rectangle {
+    in property <string> title: "";
+    background: Theme.card-bg; 
+    border-radius: 8px; 
+    border-width: 1px;
+    border-color: Theme.border;
+    
+    VerticalBox {
+        padding: 8px; spacing: 8px;
+        Text { 
+            text: root.title; 
+            font-size: 14px; 
+            font-weight: 700; 
+            color: Theme.text-primary; 
+        }
+        @children
+    }
+}
