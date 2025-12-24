@@ -2,19 +2,25 @@
 import { Theme } from "../theme.slint";
 
 export component TrendChart inherits Rectangle {
-    // 🔴 [修改] 改成接收字串
-    in property <string> chart-path; 
-    in property <brush> line-color: #00ff00;
+    // [修改] 改為接收兩組字串
+    in property <string> path-voltage;
+    in property <string> path-current;
     
     background: Theme.display-bg;
     border-radius: 4px;
     clip: true;
 
+    // 1. 電流曲線 (畫在底層或上層都可以，這裡放底層)
     Path {
-        stroke: root.line-color;
+        stroke: #55ffff; // 青色 (Current)
         stroke-width: 2px;
-        
-        // 🔴 [修改] 直接使用 SVG 指令字串
-        commands: root.chart-path;
+        commands: root.path-current;
+    }
+
+    // 2. 電壓曲線
+    Path {
+        stroke: #55ff55; // 綠色 (Voltage)
+        stroke-width: 2px;
+        commands: root.path-voltage;
     }
 }

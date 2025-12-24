@@ -10,7 +10,7 @@ export component AppWindow inherits Window {
     title: root.window-title;
     in-out property <string> window-title: "Rust PSU Controller";
     width: 800px;
-    height: 600px; 
+    // height: 600px; // 建議拿掉固定高度，讓視窗自動適應內容
     background: Theme.background; 
 
     // --- 屬性 ---
@@ -24,15 +24,20 @@ export component AppWindow inherits Window {
     in-out property <bool> enable-auto-refresh: true;
     in-out property <bool> is-output-on: false;
     in-out property <string> psu-mode: "CV"; // 預設 CV
-    in-out property <string> chart-data: "";
-    in-out property <bool> show-chart: false;
+    in-out property <string> chart-data-v: ""; // Voltage Path
+    in-out property <string> chart-data-i: ""; // Current Path
+    in-out property <bool> show-chart: true;
+    in-out property <float> active-voltage-target: 0.0;
+    in-out property <float> active-current-limit: 1.0; // 給個預設值避免除以0
 
     // --- 數值 ---
     in-out property <string> voltage-reading: "---";
     in-out property <string> current-reading: "---";
     in-out property <string> target-voltage: "12.00";
     in-out property <string> target-current: "1.000";
-    in-out property <string> polling-interval: "1000";
+    in-out property <string> polling-interval: "200";
+    in-out property <string> power-reading: "0.00";
+    in-out property <string> chart-duration: "10s";
 
     // --- Callbacks (維持不變) ---
     callback toggle_connection();
@@ -54,6 +59,9 @@ export component AppWindow inherits Window {
         // --- Header ---
         HorizontalBox {
             spacing: 10px;
+
+            VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
+
             Text { text: "Port:"; vertical-alignment: center; color: white; }
             ComboBox {
                 model: root.available-ports;
@@ -69,7 +77,7 @@ export component AppWindow inherits Window {
                 }
             }
             
-            // [修改] Auto-Poll 區塊
+            // Auto-Poll 區塊
             HorizontalBox {
                 spacing: 5px;
 
@@ -79,12 +87,20 @@ export component AppWindow inherits Window {
                     toggled => { root.toggle_auto_refresh(self.checked); }
                 }
                 
-                // [新增] 頻率設定輸入框
+                // 頻率設定輸入框
                 Text { text: "Interval:"; color: #aaa; vertical-alignment: center; font-size: 12px; }
+                
                 LineEdit { 
                     text <=> root.polling-interval; 
-                    width: 50px; 
+                    
+                    // 🔴 [修正 1] 加大寬度 (原本 50px 太擠，X 會擋住字)
+                    width: 80px; 
+                    
+                    // 🟢 [優化] 讓數字置中顯示，比較像儀器設定
+                    horizontal-alignment: center;
+
                     placeholder-text: "ms";
+                    
                     // 當輸入改變且目前正在跑 Auto-Poll 時，重新觸發一次 toggle 來更新 Timer
                     accepted => { 
                         if (root.enable-auto-refresh) {
@@ -94,8 +110,6 @@ export component AppWindow inherits Window {
                 }
                 Text { text: "ms"; color: #aaa; vertical-alignment: center; font-size: 12px; }
             }
-
-            VerticalLayout { alignment: center; Rectangle { width: 12px; height: 12px; border-radius: 6px; background: root.status-color; } }
             
             Rectangle { horizontal-stretch: 1; }
 
@@ -106,41 +120,125 @@ export component AppWindow inherits Window {
         TabWidget {
             Tab {
                 title: "Manual Control";
+                
+                // 左右並排佈局
                 HorizontalBox {
-                    spacing: 15px; padding: 15px;
-                    
-                    // 1. Voltage (使用元件)
-                    ValueControlCard {
-                        title: "VOLTAGE (V)";
-                        reading: root.voltage-reading;
-                        reading-color: #55ff55; // 綠色字
-                        unit: "Set";
-                        target-value <=> root.target-voltage;
+                    padding: 20px;
+                    spacing: 20px; // 左邊面板與右邊按鈕的間距
+                    alignment: center; // 整體置中
 
-                        // [連接訊號] 讓電壓卡片也能顯示模式 (選用)
-                        // 如果是 CV 模式，通常電壓是穩定的，顯示在這裡也合理
-                        mode: root.psu-mode;
+                    // --- 左邊區塊：控制面板 (Card) ---
+                    Card {
+                        title: "OUTPUT CHANNEL";
+                        width: 450px; // 給定寬度，讓版面比較穩重
                         
-                        request-read => { root.read_voltage(); }
-                        request-apply => { root.apply_voltage(root.target-voltage); }
-                        request-adjust(val) => { root.adjust_voltage(val * 0.1); }
+                        // Card 內部依然是用 VerticalLayout 把電壓/電流上下疊起來
+                        VerticalLayout {
+                            padding: 10px;
+                            spacing: 15px;
+
+                            // 1. 電壓控制列
+                            ValueControlCard {
+                                title: "V"; 
+                                reading: root.voltage-reading;
+                                reading-color: #55ff55;
+                                unit: "Set";
+                                target-value <=> root.target-voltage;
+                                mode: root.psu-mode == "CV" ? "CV" : "";
+                                
+                                request-read => { root.read_voltage(); }
+                                request-apply => { root.apply_voltage(root.target-voltage); }
+                                request-adjust(val) => { root.adjust_voltage(val * 0.1); }
+                            }
+
+                            Rectangle { height: 1px; background: #444; }
+
+                            // 2. 電流控制列
+                            ValueControlCard {
+                                title: "A"; 
+                                reading: root.current-reading;
+                                reading-color: #55ffff;
+                                unit: "Limit";
+                                target-value <=> root.target-current;
+                                mode: root.psu-mode == "CC" ? "CC" : "";
+                                
+                                request-read => { root.read_current(); }
+                                request-apply => { root.apply_current(root.target-current); }
+                                request-adjust(val) => { root.adjust_current(val * 0.01); }
+                            }
+                            // 🟢 [新增] 分隔線
+                            Rectangle { height: 1px; background: #444; }
+
+                            // 🟢 [新增] 功率顯示列 (純顯示，無控制功能)
+                            Rectangle {
+                                height: 50px; // 高度與上面一致
+                                background: Theme.display-bg; // 使用螢幕背景色
+                                border-radius: 4px;
+                                
+                                HorizontalLayout {
+                                    padding-left: 10px; 
+                                    padding-right: 10px;
+                                    alignment: space-between; // 靠兩邊對齊
+
+                                    // 左側：標籤與數值
+                                    HorizontalLayout {
+                                        spacing: 10px;
+                                        
+                                        // 小標題 W
+                                        Text { 
+                                            text: "W";
+                                            color: #888;
+                                            font-size: 12px;
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+
+                                        // 功率數值
+                                        Text { 
+                                            text: root.power-reading; 
+                                            color: #ff55ff; // 洋紅色，區分 V/I
+                                            font-size: 32px; 
+                                            font-weight: 700; 
+                                            vertical-alignment: center; 
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // 2. Current (使用元件)
-                    ValueControlCard {
-                        title: "CURRENT (A)";
-                        reading: root.current-reading;
-                        reading-color: #55ffff; // 青色字
-                        unit: "Lim";
-                        target-value <=> root.target-current;
-
-                        // [連接訊號] 讓電流卡片顯示模式
-                        // 如果進入 CC 模式，這裡會變紅色 "CC"
-                        mode: root.psu-mode;
-
-                        request-read => { root.read_current(); }
-                        request-apply => { root.apply_current(root.target-current); }
-                        request-adjust(val) => { root.adjust_current(val * 0.01); }
+                    // --- 右邊區塊：巨大的開關按鈕 ---
+                    VerticalLayout {
+                        alignment: center; // 垂直置中
+                        
+                        // [修改] 合併成單一按鈕
+                        Button {
+                            // 文字邏輯：顯示 OUTPUT 以及目前的狀態
+                            text: root.is-output-on ? "OUTPUT\nON" : "OUTPUT\nOFF";
+                            
+                            // 顏色邏輯：ON 的時候亮燈 (Primary Color)，OFF 的時候暗 (預設灰色)
+                            primary: root.is-output-on;
+                            
+                            // 只有連線時才能按
+                            enabled: root.status-text == "Connected";
+                            
+                            // 樣式：做成正方形或稍微大一點的矩形，好按
+                            width: 100px;
+                            height: 100px; 
+                            
+                            // 點擊邏輯：切換狀態
+                            clicked => { 
+                                if (root.is-output-on) {
+                                    // 如果原本是 ON，就關掉
+                                    root.is-output-on = false; 
+                                    root.send_command("OUTP OFF"); 
+                                } else {
+                                    // 如果原本是 OFF，就打開
+                                    root.is-output-on = true; 
+                                    root.send_command("OUTP ON"); 
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -179,33 +277,36 @@ export component AppWindow inherits Window {
             }
         }
 
-        // [新增] 趨勢圖區塊
+        // --- 趨勢圖區塊 ---
         if (root.show-chart) : VerticalBox {
+            vertical-stretch: 0; // 避免佔用過多空間
             spacing: 5px;
-            Text { 
-                text: "Voltage Trend (10s)"; 
-                color: #aaa; 
-                font-size: 12px; 
+            
+            // 標題顯示顏色說明
+            HorizontalLayout {
+                spacing: 10px;
+
+                // [修改] 這裡不再寫死 "Trend (10s)"，而是用變數組合
+                Text { 
+                    text: "Trend (" + root.chart-duration + "):"; 
+                    color: #aaa; 
+                    font-size: 12px; 
+                }
+
+                Text { text: "Voltage"; color: #55ff55; font-size: 12px; font-weight: 700; }
+                Text { text: "/"; color: #666; font-size: 12px; }
+                Text { text: "Current"; color: #55ffff; font-size: 12px; font-weight: 700; }
             }
+            
             TrendChart {
-                height: 100px;
-                line-color: #00ff00;
-                chart-path: root.chart-data;
+                height: 120px; // 稍微加高一點讓兩條線不那麼擠
+                // [綁定]
+                path-voltage: root.chart-data-v;
+                path-current: root.chart-data-i;
             }
         }
 
-        // --- Footer ---
-        HorizontalBox {
-            height: 50px; spacing: 20px;
-            Button {
-                text: "OUTPUT ON"; primary: root.is-output-on; enabled: root.status-text == "Connected";
-                clicked => { root.is-output-on = true; root.send_command("OUTP ON"); }
-            }
-            Button {
-                text: "OUTPUT OFF"; enabled: root.status-text == "Connected";
-                clicked => { root.is-output-on = false; root.send_command("OUTP OFF"); }
-            }
-        }
+        // 🔴 [已刪除] 原本這裡的 Footer (重複的按鈕) 已經被移除了
     }
 
     // --- Overlay ---

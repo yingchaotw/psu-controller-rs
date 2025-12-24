@@ -1,110 +1,116 @@
 // ui/components/value_control.slint
 import { Button, LineEdit, HorizontalBox } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Card } from "card.slint";
+// 移除 import Card，因為不再繼承它
 
-export component ValueControlCard inherits Card {
+// [修改] 改為繼承 Rectangle (作為單純的容器)
+export component ValueControlCard inherits Rectangle {
     // --- 輸入屬性 ---
+    in property <string> title: ""; // 保留這個，作為小標籤顯示
     in property <string> reading: "---";
     in property <brush> reading-color: white;
     in property <string> unit: "";
     in-out property <string> target-value;
-    
-    // [修改] 這個屬性現在只給滾輪邏輯用，不顯示在按鈕上了
-    in property <string> fine-step-text: "0.01"; 
-    
-    // [新增] 接收模式訊號 (CC/CV)
     in property <string> mode: ""; 
-
+    
     // --- Callbacks ---
     callback request-read();
     callback request-apply();
     callback request-adjust(float);
 
-    Rectangle {
-        vertical-stretch: 1; 
+    // [新增] 為了讓排版好看，給定一個固定高度 (可選)
+    height: 90px; 
 
-        // 1. [底層] 滾輪感應
-        TouchArea {
-            width: 100%; height: 100%;
-            scroll-event(event) => {
-                // 滾輪依然有效：向上+1，向下-1
-                if (event.delta-y > 0) { root.request-adjust(1.0); } 
-                else { root.request-adjust(-1.0); }
-                accept
-            }
+    // 1. [底層] 滾輪感應
+    TouchArea {
+        width: 100%; height: 100%;
+        scroll-event(event) => {
+            if (event.delta-y > 0) { root.request-adjust(1.0); } 
+            else { root.request-adjust(-1.0); }
+            accept
         }
+    }
 
-        // 2. [上層] UI 內容
-        VerticalLayout {
-            spacing: 10px; // 增加一點間距讓畫面寬鬆
+    // 2. [上層] UI 內容
+    VerticalLayout {
+        spacing: 5px;
 
-            // A. 讀值顯示區 (含 CC/CV 燈號)
-            Rectangle {
-                background: Theme.display-bg; 
-                border-radius: 4px; 
-                height: 50px; //稍微加高
-                
+        // A. 標題與讀值區
+        Rectangle {
+            background: Theme.display-bg; 
+            border-radius: 4px; 
+            // vertical-stretch: 1; // 讓讀值區佔據多一點空間
+            height: 50px;
+            
+            HorizontalLayout {
+                padding-left: 10px; 
+                padding-right: 10px;
+                alignment: space-between;
+
+                // 左側：小標題 (VOLTAGE) + 數值
                 HorizontalLayout {
-                    padding-left: 10px; 
-                    padding-right: 10px;
                     spacing: 10px;
-                    alignment: space-between; // 讓內容分散對齊
+                    
+                    // 小標題 (例如 V)
+                    Text { 
+                        text: root.title;
+                        color: #888;
+                        font-size: 12px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
 
                     // 數值
                     Text { 
                         text: root.reading; 
                         color: root.reading-color; 
-                        font-size: 28px; 
+                        font-size: 32px; // 字體加大
                         font-weight: 700; 
                         vertical-alignment: center; 
                     }
+                }
 
-                    // [CC/CV 燈號顯示]
-                    // 只有當 mode 不為空時才顯示
-                    if (root.mode != "") : Rectangle {
-                        width: 30px; height: 20px;
-                        border-radius: 4px;
-                        background: root.mode == "CC" ? #ff5555 : #55ff55; // CC紅燈，CV綠燈
-                        y: 15px; // 垂直置中微調
-                        
-                        Text {
-                            text: root.mode;
-                            color: #1c1c1c; // 深色字對比強
-                            font-size: 11px;
-                            font-weight: 700;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
-                        }
+                // 右側：燈號 (CC/CV)
+                if (root.mode != "") : Rectangle {
+                    width: 30px; height: 20px;
+                    border-radius: 4px;
+                    background: root.mode == "CC" ? #ff5555 : #55ff55;
+                    y: 15px; 
+                    
+                    Text {
+                        text: root.mode;
+                        color: #1c1c1c;
+                        font-size: 11px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
                     }
                 }
-                // 點擊讀值刷新
-                TouchArea { clicked => { root.request-read(); } }
             }
+            TouchArea { clicked => { root.request-read(); } }
+        }
 
-            // B. 輸入框與 Apply 按鈕
-            HorizontalBox {
-                padding: 0px; 
-                spacing: 5px;
-                Text { text: root.unit + ":"; color: #888; vertical-alignment: center; width: 30px;}
-                
-                // 輸入框
-                LineEdit { 
-                    text <=> root.target-value; 
-                    placeholder-text: "Set";
-                }
-                
-                // Apply 按鈕
-                Button { 
-                    text: "Apply"; 
-                    width: 60px; 
-                    clicked => { root.request-apply(); } 
-                }
+        // B. 設定區 (Set: [___] Apply)
+        HorizontalBox {
+            padding: 0px; 
+            spacing: 10px;
+            alignment: end; // 靠右對齊，看起來比較整潔
+
+            Text { text: root.unit + ":"; color: #666; vertical-alignment: center; font-size: 12px;}
+            
+            LineEdit { 
+                text <=> root.target-value; 
+                placeholder-text: "Set Value";
+                width: 80px; // 限制寬度
+                height: 25px;
             }
             
-            // [已刪除] 原本這裡的 +/- 按鈕 HorizontalBox 已經拿掉了
-            
-            Rectangle { vertical-stretch: 1; }
+            Button { 
+                text: "Apply"; 
+                width: 50px; 
+                height: 25px;
+                clicked => { root.request-apply(); } 
+            }
         }
     }
 }

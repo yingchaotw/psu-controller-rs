@@ -20,8 +20,11 @@ pub mod cmds {
     pub const READ_ALL: &str   = "MEAS:ALL?";
     pub const READ_VOLT: &str  = "MEAS:VOLT?";
     pub const READ_CURR: &str  = "MEAS:CURR?";
+    pub const READ_OUTP: &str  = "OUTPut?";
     pub const OUTP_ON: &str    = "OUTP ON";
     pub const OUTP_OFF: &str   = "OUTP OFF";
+    pub const GET_SET_VOLT: &str = "SOUR:VOLT:LEV:IMM:AMPL?";
+    pub const GET_SET_CURR: &str = "SOUR:CURR:LEV:IMM:AMPL?";
 }
 
 /// 讀取序列埠回應
